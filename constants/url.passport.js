@@ -1,5 +1,5 @@
-const urlBackend = 'http://localhost:5000';
-const urlFrontend = 'http://localhost:4200';
+const urlBackend = 'https://api-rest-truequecito.onrender.com/auth/google/callback';
+const urlFrontend = 'https://truequecito.vercel.app';
 
 exports.FRONTEND_URL = urlFrontend;
 exports.URL_BACKEND = urlBackend;
