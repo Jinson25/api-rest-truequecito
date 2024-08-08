@@ -1,4 +1,5 @@
 const Exchange = require('../models/Exchange');
+const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { v4: uuidv4 } = require('uuid');
 
@@ -7,64 +8,102 @@ const generateUniqueCode = () => uuidv4().slice(0, 10).toUpperCase();
 
 // Proponer un intercambio
 exports.proposeExchange = async (req, res) => {
-  const { productOffered, productRequested } = req.body;
+  const { productOffered, productRequested, userRequested } = req.body;
   try {
     const uniqueCode = generateUniqueCode();
-    console.log('Generated unique code:', uniqueCode);
     const exchange = new Exchange({
       productOffered,
       productRequested,
       userOffered: req.user.id,
-      userRequested: req.body.userRequested,
+      userRequested,
       uniqueCode
     });
     await exchange.save();
-    console.log('Exchange created with unique code:', uniqueCode);
+
+    // Crear notificación para el usuario solicitado
+const notification = new Notification({
+  userId: userRequested,
+  message: 'Propuesta de intercambio recibida',
+  timestamp: new Date(),
+  read: false
+});
+
+    await notification.save();
+
     res.status(201).json({ message: 'Exchange proposed successfully', exchange });
   } catch (error) {
-    console.error('Error proposing exchange:', error);
     res.status(500).json({ error: error.message });
   }
 };
 
+// Aceptar intercambio
+exports.acceptExchange = async (req, res) => {
+  try {
+    const { exchangeId } = req.params;
+
+    const exchange = await Exchange.findById(exchangeId);
+    if (!exchange) {
+      return res.status(404).json({ message: 'Intercambio no encontrado' });
+    }
+
+    exchange.status = 'accepted';
+    await exchange.save();
+
+    res.status(200).json({ message: 'Intercambio completado correctamente', exchange });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+  
+  // Rechazar intercambio
+  exports.rejectExchange = async (req, res) => {
+    const { exchangeId } = req.params;
+    try {
+      // Actualiza el estado del intercambio a "rejected"
+      const exchange = await Exchange.findByIdAndUpdate(exchangeId, { status: 'rejected' }, { new: true });
+  
+      if (!exchange) {
+        return res.status(404).json({ message: 'Exchange not found' });
+      }
+  
+      // Envía notificación a los usuarios involucrados
+      await sendNotificationToUsers(exchange, 'rejected');
+  
+      res.status(200).json({ message: 'Intercambio rechazado correctamente', exchange });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  };
+  
+  // Función para enviar notificaciones a los usuarios involucrados
+  async function sendNotificationToUsers(exchange, status) {
+    const userOffered = await User.findById(exchange.userOffered);
+    const userRequested = await User.findById(exchange.userRequested);
+  
+    if (userOffered && userRequested) {
+      const message = `El intercambio fue ${status}`;
+      const notifications = [
+        new Notification({ userId: userOffered._id, message, timestamp: new Date(), read: false }),
+        new Notification({ userId: userRequested._id, message, timestamp: new Date(), read: false })
+      ];
+  
+      await Notification.insertMany(notifications);
+      console.log(`Notificando a ${userOffered.email} y ${userRequested.email} que el intercambio fue ${status}`);
+    }
+  }
+
 // Obtener intercambios recibidos
 exports.getReceivedExchanges = async (req, res) => {
   try {
-    console.log('Fetching received exchanges for user:', req.user.id);
     const exchanges = await Exchange.find({ userRequested: req.user.id, status: { $in: ['pending', 'accepted'] } })
-      .populate({
-        path: 'productOffered',
-        select: 'title description images',
-      })
-      .populate({
-        path: 'productRequested',
-        select: 'title description images',
-      })
-      .populate({
-        path: 'userOffered',
-        select: 'username email',
-      })
-      .populate({
-        path: 'userRequested',
-        select: 'username email',
-      });
+      .populate('productOffered', 'title description images')
+      .populate('productRequested', 'title description images')
+      .populate('userOffered', 'username email')
+      .populate('userRequested', 'username email');
 
-    const formattedExchanges = exchanges.map(exchange => ({
-      ...exchange._doc,
-      productOffered: {
-        ...exchange._doc.productOffered._doc,
-        image: exchange._doc.productOffered.images[0]
-      },
-      productRequested: {
-        ...exchange._doc.productRequested._doc,
-        image: exchange._doc.productRequested.images[0]
-      }
-    }));
-
-    console.log('Received exchanges fetched:', formattedExchanges);
-    res.status(200).json(formattedExchanges);
+    res.status(200).json(exchanges);
   } catch (error) {
-    console.error('Error fetching received exchanges:', error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -72,8 +111,72 @@ exports.getReceivedExchanges = async (req, res) => {
 // Obtener intercambios enviados
 exports.getSentExchanges = async (req, res) => {
   try {
-    console.log('Fetching sent exchanges for user:', req.user.id);
     const exchanges = await Exchange.find({ userOffered: req.user.id, status: { $in: ['pending', 'accepted'] } })
+      .populate('productOffered', 'title description images')
+      .populate('productRequested', 'title description images')
+      .populate('userOffered', 'username email')
+      .populate('userRequested', 'username email');
+
+    res.status(200).json(exchanges);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Subir comprobante
+exports.uploadReceipt = async (req, res) => {
+  const { exchangeId, userType, address, phoneNumber } = req.body;
+  const file = req.file;
+
+  try {
+    const exchange = await Exchange.findById(exchangeId);
+    if (!exchange) {
+      return res.status(404).json({ message: 'Intercambio no encontrado' });
+    }
+
+    if (userType === 'requested') {
+      exchange.receiptRequested = file.path;
+      exchange.addressRequested = address;
+      exchange.phoneRequested = phoneNumber;
+    } else if (userType === 'offered') {
+      exchange.receiptOffered = file.path;
+      exchange.addressOffered = address;
+      exchange.phoneOffered = phoneNumber;
+    }
+
+    if (!exchange.firstReceiptUploadedBy) {
+      exchange.firstReceiptUploadedBy = req.user._id;
+    }
+
+    await exchange.save();
+
+    if (exchange.receiptRequested && exchange.receiptOffered) {
+      exchange.status = 'completed';
+      await exchange.save();
+      console.log('Ambos comprobantes cargados, notificar al administrador.');
+      // Lógica para notificar al administrador
+    } else {
+      const otherUserId = userType === 'offered' ? exchange.userRequested : exchange.userOffered;
+      const notification = new Notification({
+        userId: otherUserId,
+        message: 'Comprobante subido, por favor sube tu comprobante para completar el intercambio',
+        timestamp: new Date(),
+        read: false
+      });
+      await notification.save();
+    }
+
+    res.status(200).json({ message: 'Comprobante cargado con éxito', exchange });
+  } catch (error) {
+    res.status(500).json({ message: 'Error al cargar el comprobante', error: error.message });
+  }
+};
+
+  //Obtener todos los intercabios
+exports.getAllExchanges = async (req, res) => {
+  try {
+    // Verifica que el modelo Exchange esté correctamente configurado
+    const exchanges = await Exchange.find()
       .populate({
         path: 'productOffered',
         select: 'title description images',
@@ -91,26 +194,43 @@ exports.getSentExchanges = async (req, res) => {
         select: 'username email',
       });
 
-    const formattedExchanges = exchanges.map(exchange => ({
-      ...exchange._doc,
-      productOffered: {
-        ...exchange._doc.productOffered._doc,
-        image: exchange._doc.productOffered.images[0]
-      },
-      productRequested: {
-        ...exchange._doc.productRequested._doc,
-        image: exchange._doc.productRequested.images[0]
-      }
-    }));
-
-    console.log('Sent exchanges fetched:', formattedExchanges);
-    res.status(200).json(formattedExchanges);
+    // Devuelve la respuesta exitosa con los intercambios
+    res.status(200).json(exchanges);
   } catch (error) {
-    console.error('Error fetching sent exchanges:', error);
-    res.status(500).json({ error: error.message });
+    // Log de error para depuración
+    console.error('Error:', error.message);
+
+    // Respuesta con error
+    res.status(500).json({ error: 'Error, intentalo nuevamente' });
   }
 };
+// Obtener intercambios completados
+exports.getCompletedExchanges = async (req, res) => {
+  try {
+    const exchanges = await Exchange.find({ status: 'completed' })
+      .populate({
+        path: 'productOffered',
+        select: 'title description images estado preference',
+      })
+      .populate({
+        path: 'productRequested',
+        select: 'title description images estado preference',
+      })
+      .populate({
+        path: 'userOffered',
+        select: 'username email',
+      })
+      .populate({
+        path: 'userRequested',
+        select: 'username email',
+      });
 
+    res.status(200).json(exchanges);
+  } catch (error) {
+    console.error('Error:', error.message);
+    res.status(500).json({ error: 'Error, intentalo nuevamente' });
+    }
+  };
 
 // Actualizar estado del intercambio
 exports.updateExchangeStatus = async (req, res) => {
@@ -131,8 +251,14 @@ exports.updateExchangeStatus = async (req, res) => {
     const userRequested = await User.findById(exchange.userRequested);
 
     if (userOffered && userRequested) {
+      const message = `El intercambio fue ${status}`;
+      const notifications = [
+        new Notification({ userId: userOffered._id, message, timestamp: new Date(), read: false }),
+        new Notification({ userId: userRequested._id, message, timestamp: new Date(), read: false })
+      ];
+
+      await Notification.insertMany(notifications);
       console.log(`Notificando a ${userOffered.email} y ${userRequested.email} que el intercambio fue ${status}`);
-      // Aquí puedes agregar lógica para enviar un correo o notificación
     }
 
     res.status(200).json({ message: `Exchange ${status} successfully`, uniqueCode: exchange.uniqueCode });
@@ -145,7 +271,6 @@ exports.updateExchangeStatus = async (req, res) => {
 exports.getExchangeById = async (req, res) => {
   try {
     const exchangeId = req.params.exchangeId;
-    console.log('Fetching exchange with ID:', exchangeId);
     const exchange = await Exchange.findById(exchangeId)
       .populate('productOffered')
       .populate('productRequested');
@@ -154,43 +279,10 @@ exports.getExchangeById = async (req, res) => {
       return res.status(404).json({ message: 'Exchange not found' });
     }
 
-    console.log('Exchange fetched:', exchange);
-    console.log('Exchange unique code:', exchange.uniqueCode);
-    res.json(exchange);
+    const userType = exchange.userOffered.toString() === req.user.id ? 'requested' : 'offered';
+    res.json({ ...exchange.toObject(), userType });
   } catch (error) {
-    console.error('Error fetching exchange:', error);
     res.status(500).json({ message: 'Server error' });
   }
-};
 
-// Subir comprobante
-exports.uploadReceipt = async (req, res) => {
-  const { exchangeId, userType } = req.body;
-  const file = req.file;
-
-  try {
-    const exchange = await Exchange.findById(exchangeId);
-    if (!exchange) {
-      return res.status(404).json({ message: 'Intercambio no encontrado' });
-    }
-
-    if (userType === 'offered') {
-      exchange.receiptOffered = file.path;
-    } else if (userType === 'requested') {
-      exchange.receiptRequested = file.path;
-    }
-
-    await exchange.save();
-
-    // Notificar al otro usuario si ambos comprobantes han sido cargados
-    if (exchange.receiptOffered && exchange.receiptRequested) {
-      // Notificación al administrador
-      console.log('Ambos comprobantes cargados, notificar al administrador.');
-      // Aquí puedes agregar la lógica para notificar al administrador
-    }
-
-    res.status(200).json({ message: 'Comprobante cargado con éxito', exchange });
-  } catch (error) {
-    res.status(500).json({ message: 'Error al cargar el comprobante', error: error.message });
-  }
 };

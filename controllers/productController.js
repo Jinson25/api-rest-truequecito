@@ -1,9 +1,14 @@
 const Product = require('../models/Product');
 const User = require('../models/User');
+const Exchange = require('../models/Exchange'); // Importar el modelo Exchange
 
 exports.createProduct = async (req, res) => {
-  const { title, description, images, estado,preference } = req.body;
+  const { title, description, images, estado, preference } = req.body;
   try {
+    if (!title || !description || !images) {
+      return res.status(400).json({ message: 'Todos los campos son requeridos' });
+    }
+
     const product = new Product({
       user: req.user.id,
       title,
@@ -16,11 +21,18 @@ exports.createProduct = async (req, res) => {
     await product.save();
 
     const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
     user.products.push(product._id);
     await user.save();
 
+    console.log('Producto creado correctamente:', product);
+
     res.status(201).json({ message: 'Producto creado correctamente', product });
   } catch (error) {
+    console.error('Error al crear producto:', error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -28,12 +40,30 @@ exports.createProduct = async (req, res) => {
 exports.getProducts = async (req, res) => {
   const searchTerm = req.query.search || '';
   try {
+    // Obtener los productos que están en intercambios completados
+    const completedExchanges = await Exchange.find({ status: 'completed' }).select('productOffered productRequested');
+    const completedProductIds = completedExchanges.reduce((ids, exchange) => {
+      ids.push(exchange.productOffered, exchange.productRequested);
+      return ids;
+    }, []);
+
     const query = searchTerm
-      ? { approved: true, title: { $regex: searchTerm, $options: 'i' } }
-      : { approved: true };
+      ? { _id: { $nin: completedProductIds }, approved: true, title: { $regex: searchTerm, $options: 'i' } }
+      : { _id: { $nin: completedProductIds }, approved: true };
+
+    console.log('Query:', query); // Mensaje de consola para verificar la consulta
+
     const products = await Product.find(query).populate('user', 'email username');
+
+    console.log('Products found:', products.map(product => ({
+      id: product._id,
+      status: product.status,
+      title: product.title
+    }))); // Mensaje de consola para verificar los productos encontrados
+
     res.status(200).json(products);
   } catch (error) {
+    console.error('Error in getProducts:', error.message); // Mensaje de consola para errores
     res.status(500).json({ error: error.message });
   }
 };
@@ -132,11 +162,11 @@ exports.searchProducts = async (req, res) => {
 
     const products = await Product.find({
       approved: true,
-  $or: [
-    { title: { $regex: normalizedSearchTerm, $options: 'i' } },
-    { description: { $regex: normalizedSearchTerm, $options: 'i' } }
-  ]
-})
+      $or: [
+        { title: { $regex: normalizedSearchTerm, $options: 'i' } },
+        { description: { $regex: normalizedSearchTerm, $options: 'i' } }
+      ]
+    })
     .skip(skip)
     .limit(limit);
 

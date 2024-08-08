@@ -37,6 +37,7 @@ exports.registerUser = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
 exports.oauthRegisterUser = async (profile, done) => {
   const { id, displayName, emails, photos } = profile;
   try {
@@ -66,7 +67,6 @@ exports.oauthRegisterUser = async (profile, done) => {
   }
 };
 
-
 exports.loginUser = async (req, res) => {
   const { email, password } = req.body;
   try {
@@ -83,13 +83,24 @@ exports.loginUser = async (req, res) => {
       console.log('Comparación de contraseñas:', isMatch, 'Ingresada:', password, 'Almacenada:', user.password);
 
       if (isMatch) {
+        // Calcular reputación basada en el número de intercambios
+        if (user.exchanges >= 15) {
+          user.reputation = 5;
+        } else {
+          user.reputation = Math.round((user.exchanges / 15) * 5);
+        }
+        await user.save();
+        console.log(`Reputation después de guardar: ${user.reputation}`);
+
         res.json({
           user: {
-            id: user.id, // Cambiar de _id a id
+            id: user.id,
             email: user.email,
             username: user.username,
             avatar: user.avatar,
-            role: user.role // Agregar el role aquí si no está
+            role: user.role,
+            exchanges: user.exchanges,
+            reputation: user.reputation
           },
           token: generateToken(user._id),
         });
@@ -103,8 +114,6 @@ exports.loginUser = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
-
-
 exports.getUserProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('-password');
