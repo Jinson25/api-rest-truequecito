@@ -76,11 +76,11 @@ exports.loginUser = async (req, res) => {
 
     const user = await User.findOne({ email });
 
-    console.log('Usuario encontrado para el email:', user);
+  
 
     if (user) {
       const isMatch = await bcrypt.compare(password, user.password);
-      console.log('Comparación de contraseñas:', isMatch, 'Ingresada:', password, 'Almacenada:', user.password);
+    
 
       if (isMatch) {
         // Calcular reputación basada en el número de intercambios
@@ -90,7 +90,7 @@ exports.loginUser = async (req, res) => {
           user.reputation = Math.round((user.exchanges / 15) * 5);
         }
         await user.save();
-        console.log(`Reputation después de guardar: ${user.reputation}`);
+    
 
         res.json({
           user: {

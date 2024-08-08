@@ -30,18 +30,18 @@ exports.updateProfile = async (req, res) => {
 
     if (typeof exchanges === 'number' && exchanges >= 0) {
       user.exchanges = exchanges;
-      console.log(`Exchanges antes de guardar: ${user.exchanges}`);
+  
 
       if (user.exchanges >= 15) {
         user.reputation = 5;
       } else {
         user.reputation = Math.round((user.exchanges / 15) * 5);
       }
-      console.log(`Reputation antes de guardar: ${user.reputation}`);
+   
     }
 
     await user.save();
-    console.log(`Usuario guardado: ${user}`);
+
     res.json(user);
   } catch (err) {
     console.error('Error actualizando perfil:', err);
@@ -63,7 +63,7 @@ exports.getUserById = async (req, res) => {
     } else {
       user.reputation = Math.round((user.exchanges / 15) * 5);
     }
-    console.log(`Reputation calculada en getUserById: ${user.reputation}`);
+ 
 
     res.json({ user });
   } catch (err) {

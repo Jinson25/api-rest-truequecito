@@ -80,7 +80,7 @@ exports.getNotifications = async (req, res) => {
 exports.markAsRead = async (req, res) => {
   try {
     const notificationId = req.params.notificationId;
-    console.log('Marcando como leída la notificación con ID:', notificationId);
+  
     const notification = await Notification.findById(notificationId);
     if (!notification) {
       return res.status(404).json({ message: 'Notification not found' });
@@ -92,7 +92,7 @@ exports.markAsRead = async (req, res) => {
 
     notification.read = true;
     await notification.save();
-    console.log('Notificación marcada como leída:', notification);
+
 
     res.status(200).json({ message: 'Notification marked as read' });
   } catch (error) {

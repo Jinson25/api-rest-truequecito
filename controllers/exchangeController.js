@@ -89,7 +89,7 @@ exports.acceptExchange = async (req, res) => {
       ];
   
       await Notification.insertMany(notifications);
-      console.log(`Notificando a ${userOffered.email} y ${userRequested.email} que el intercambio fue ${status}`);
+    
     }
   }
 
@@ -153,13 +153,13 @@ exports.uploadReceipt = async (req, res) => {
     if (exchange.receiptRequested && exchange.receiptOffered) {
       exchange.status = 'completed';
       await exchange.save();
-      console.log('Ambos comprobantes cargados, notificar al administrador.');
+ 
       // Lógica para notificar al administrador
     } else {
       const otherUserId = userType === 'offered' ? exchange.userRequested : exchange.userOffered;
       const notification = new Notification({
         userId: otherUserId,
-        message: 'Comprobante subido, por favor sube tu comprobante para completar el intercambio',
+        message: 'Comprobante subido, te notificaremos cuando exista una actualización.',
         timestamp: new Date(),
         read: false
       });
@@ -258,7 +258,7 @@ exports.updateExchangeStatus = async (req, res) => {
       ];
 
       await Notification.insertMany(notifications);
-      console.log(`Notificando a ${userOffered.email} y ${userRequested.email} que el intercambio fue ${status}`);
+    
     }
 
     res.status(200).json({ message: `Exchange ${status} successfully`, uniqueCode: exchange.uniqueCode });

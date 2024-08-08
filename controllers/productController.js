@@ -28,7 +28,7 @@ exports.createProduct = async (req, res) => {
     user.products.push(product._id);
     await user.save();
 
-    console.log('Producto creado correctamente:', product);
+  
 
     res.status(201).json({ message: 'Producto creado correctamente', product });
   } catch (error) {
@@ -51,15 +51,11 @@ exports.getProducts = async (req, res) => {
       ? { _id: { $nin: completedProductIds }, approved: true, title: { $regex: searchTerm, $options: 'i' } }
       : { _id: { $nin: completedProductIds }, approved: true };
 
-    console.log('Query:', query); // Mensaje de consola para verificar la consulta
+   
 
     const products = await Product.find(query).populate('user', 'email username');
 
-    console.log('Products found:', products.map(product => ({
-      id: product._id,
-      status: product.status,
-      title: product.title
-    }))); // Mensaje de consola para verificar los productos encontrados
+
 
     res.status(200).json(products);
   } catch (error) {
