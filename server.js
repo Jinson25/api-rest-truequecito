@@ -55,7 +55,7 @@ app.get('/auth/google/callback',
   passport.authenticate('google', { failureRedirect: '/login' }),
   (req, res) => {
     const token = generateToken(req.user._id);
-    const frontendURL = process.env.FRONTEND_URL;
+    const frontendURL = "https://truequecito.vercel.app";
 
     const redirectURL = `${frontendURL}/?token=${token}&id=${req.user._id}&email=${req.user.email}&username=${encodeURIComponent(req.user.username)}&avatar=${encodeURIComponent(req.user.avatar)}`;
 
@@ -67,7 +67,7 @@ app.get('/auth/discord/callback',
   passport.authenticate('discord', { failureRedirect: '/login' }),
   (req, res) => {
     const token = generateToken(req.user._id);
-    const frontendURL = process.env.FRONTEND_URL;
+    const frontendURL = "https://truequecito.vercel.app";
 
     const redirectURL = `${frontendURL}/?token=${token}&id=${req.user._id}&email=${req.user.email}&username=${encodeURIComponent(req.user.username)}&avatar=${encodeURIComponent(req.user.avatar)}`;
 
